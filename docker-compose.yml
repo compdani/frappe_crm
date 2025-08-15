@@ -5,7 +5,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./data:/work                # writable area for logs/env/compose/etc.
     environment:
-      UID: "${UID:-1000}"           # pass your host ids
-      GID: "${GID:-1000}"
+      UID: "${UID:-0}"           # pass your host ids
+      GID: "${GID:-0}"
     working_dir: /work
     command: ["--project=crm_dreia_setup --email=danilo@dreia.com --image=ghcr.io/frappe/crm --version=stable --app=crm --sitename=crm.dreia.org"]
