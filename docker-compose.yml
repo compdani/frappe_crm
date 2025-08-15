@@ -3,10 +3,7 @@ services:
     build: .
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./data:/data            # persist here, NOT over /work
-    environment:
-      HOME: /data               # script writes ~/* into ./data
+      - ./data:/work                 # writable area for logs/env/compose/etc.
+    user: "${UID:-1000}:${GID:-1000}"  # make outputs owned by your user
     working_dir: /work
-    user: "${UID:-1000}:${GID:-1000}"
-    # Show help by default; override with the subcommand you want
     command: ["--project=crm_dreia_setup --email=danilo@dreia.com --image=ghcr.io/frappe/crm --version=stable --app=crm --sitename=crm.dreia.org"]
