@@ -1,13 +1,12 @@
 services:
   installer:
     build: .
-    # So the script can spawn real Docker containers on the host
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      # Persist downloads (.env, compose file, frappe_docker, logs, passwords)
-      - ./data:/work
-    # Make created files owned by your user (Linux/macOS). Optional on Windows.
-    user: "${UID:-1000}:${GID:-1000}"
+      - ./data:/data            # persist here, NOT over /work
+    environment:
+      HOME: /data               # script writes ~/* into ./data
     working_dir: /work
+    user: "${UID:-1000}:${GID:-1000}"
     # Show help by default; override with the subcommand you want
     command: ["--project=crm_dreia_setup --email=danilo@dreia.com --image=ghcr.io/frappe/crm --version=stable --app=crm --sitename=crm.dreia.org"]
