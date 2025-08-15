@@ -10,4 +10,4 @@ services:
     user: "${UID:-1000}:${GID:-1000}"
     working_dir: /work
     # Show help by default; override with the subcommand you want
-    command: ["--help"]
+    command: ["--project=crm_dreia_setup --email=danilo@dreia.com --image=ghcr.io/frappe/crm --version=stable --app=crm --sitename=crm.dreia.org"]
