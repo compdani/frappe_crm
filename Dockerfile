@@ -1,8 +1,6 @@
 FROM frappe/bench:v5.25.9
 
 ENV SHELL=/bin/bash \
-    NODE_VERSION_DEVELOP=18 \
-    NVM_DIR=/home/frappe/.nvm \
     HOSTNAME=crm.localhost \
     MARIADB_ROOT_PASSWORD=changeme \
     SITE_ADMIN_PASSWORD=changeme \
@@ -21,5 +19,5 @@ RUN chmod +x /workspace/init.sh
 
 EXPOSE 8000
 
-# Run as root -> fix ownership if volume is mounted -> then exec as 'frappe'
+# run as root; init.sh will re-exec as 'frappe' via bash -l
 CMD ["/bin/bash", "-lc", "/workspace/init.sh"]
