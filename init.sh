@@ -1,6 +1,15 @@
 #!/bin/bash
 set -euo pipefail
 
+# Load profile so ~/.local/bin is on PATH (bench lives here)
+if [ -f "/home/frappe/.profile" ]; then
+  source /home/frappe/.profile
+fi
+export PATH="/home/frappe/.local/bin:${PATH}"
+
+# (optional) nvm Node path if you need it
+export PATH="${NVM_DIR}/versions/node/v${NODE_VERSION_DEVELOP}/bin/:${PATH}"
+
 if [ -d "/home/frappe/frappe-bench/apps/frappe" ]; then
     echo "Bench already exists, skipping init"
     cd frappe-bench
