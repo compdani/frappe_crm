@@ -1,86 +1,87 @@
 #!/bin/bash
 set -euo pipefail
 
-# --- If we're NOT the frappe user, re-exec as frappe with a login shell ---
+# 1) If not 'frappe', re-exec as 'frappe' with a login shell so ~/.profile is loaded.
 if [ "$(id -un)" != "frappe" ]; then
   exec su -l frappe -c "bash -lc '/workspace/init.sh'"
 fi
 
-# Ensure expected HOME and PATH (platforms sometimes override these)
+# 2) Baseline env (bench image normally sets these; we enforce for safety).
 export HOME="${HOME:-/home/frappe}"
-export PATH="/home/frappe/.local/bin:/home/frappe/.pyenv/shims:/home/frappe/.pyenv/bin:${PATH}"
-
-# Load profile if present (pipx/pyenv/nvm wiring)
+export PATH="/home/frappe/.nvm/versions/node/v${NODE_VERSION_DEVELOP}/bin:/home/frappe/.local/bin:/home/frappe/.pyenv/shims:/home/frappe/.pyenv/bin:${PATH}"
 [ -f "/home/frappe/.profile" ] && source "/home/frappe/.profile" || true
 
-# Optional Node path for developer mode (some custom scripts expect this)
-export PATH="${NVM_DIR}/versions/node/v${NODE_VERSION_DEVELOP}/bin/:${PATH}"
-
-# Resolve bench (don’t try to install it; base image already has it)
-BENCH="${BENCH_CMD:-/home/frappe/.local/bin/bench}"
-if ! [ -x "$BENCH" ]; then
-  # fallback to whatever is on PATH (should be set by base image)
-  if command -v bench >/dev/null 2>&1; then
-    BENCH="$(command -v bench)"
-  else
-    echo "ERROR: bench not found. PATH=$PATH" >&2
-    exit 1
-  fi
+# 3) Resolve Bench robustly: try symlink then pipx venvs (old & new layouts), then PATH.
+CANDIDATES=(
+  "/home/frappe/.local/bin/bench"
+  "/home/frappe/.local/share/pipx/venvs/bench/bin/bench"
+  "/home/frappe/.local/pipx/venvs/bench/bin/bench"
+  "/usr/local/bin/bench"
+)
+BENCH=""
+for c in "${CANDIDATES[@]}"; do
+  if [ -x "$c" ]; then BENCH="$c"; break; fi
+done
+if [ -z "$BENCH" ] && command -v bench >/dev/null 2>&1; then
+  BENCH="$(command -v bench)"
+fi
+if [ -z "$BENCH" ]; then
+  echo "ERROR: bench not found."
+  echo "Checked:"
+  printf ' - %s\n' "${CANDIDATES[@]}"
+  echo "PATH: $PATH"
+  ls -al "/home/frappe/.local/bin" 2>/dev/null || true
+  ls -al "/home/frappe/.local/share/pipx/venvs/bench/bin" 2>/dev/null || true
+  ls -al "/home/frappe/.local/pipx/venvs/bench/bin" 2>/dev/null || true
+  exit 1
 fi
 
-# Idempotency checks
 BENCH_DIR="/home/frappe/frappe-bench"
-SITE_DIR="${BENCH_DIR}/sites/${HOSTNAME}"
+SITE="${HOSTNAME}"
+SITE_DIR="${BENCH_DIR}/sites/${SITE}"
 
+# Idempotent start if already initialized
 if [ -d "${BENCH_DIR}/apps/frappe" ] && [ -d "${SITE_DIR}" ]; then
-  echo "Bench & site already exist (${SITE_DIR}), starting bench..."
+  echo "Bench & site exist, starting bench..."
   cd "${BENCH_DIR}"
-  exec "$BENCH" start
+  exec "${BENCH}" start
 fi
 
+# Initialize bench if missing
 if [ ! -d "${BENCH_DIR}/apps/frappe" ]; then
   echo "Creating new bench at ${BENCH_DIR}..."
-  "$BENCH" init --skip-redis-config-generation "${BENCH_DIR}"
+  "${BENCH}" init --skip-redis-config-generation "${BENCH_DIR}"
 fi
 
 cd "${BENCH_DIR}"
 
-# Configure external services via provided URLs
-# SQL_URL can be a hostname or DSN; bench accepts either (hostname preferred).
-# REDIS_URL must be a redis URL like: redis://[:password@]host:6379
-if [ -n "${SQL_URL:-}" ] && [ "${SQL_URL}" != "changeme" ]; then
-  "$BENCH" set-mariadb-host "${SQL_URL}"
-fi
-if [ -n "${REDIS_URL:-}" ] && [ "${REDIS_URL}" != "changeme" ]; then
-  "$BENCH" set-redis-cache-host    "${REDIS_URL}"
-  "$BENCH" set-redis-queue-host    "${REDIS_URL}"
-  "$BENCH" set-redis-socketio-host "${REDIS_URL}"
-fi
+# Configure external services (expects SQL_URL like host or DSN; REDIS_URL like redis://[:pass@]host:6379)
+[ -n "${SQL_URL:-}"   ] && [ "${SQL_URL}"   != "changeme" ] && "${BENCH}" set-mariadb-host "${SQL_URL}"
+[ -n "${REDIS_URL:-}" ] && [ "${REDIS_URL}" != "changeme" ] && {
+  "${BENCH}" set-redis-cache-host    "${REDIS_URL}"
+  "${BENCH}" set-redis-queue-host    "${REDIS_URL}"
+  "${BENCH}" set-redis-socketio-host "${REDIS_URL}"
+}
 
-# Clean Procfile entries for redis/watch (idempotent)
+# Clean Procfile of redis/watch (safe if absent)
 sed -i '/redis/d' ./Procfile || true
 sed -i '/watch/d' ./Procfile || true
 
-# Get CRM app if not present
-if ! [ -d "apps/crm" ]; then
-  "$BENCH" get-app crm
-fi
+# Get CRM if missing, create site, install app
+[ -d "apps/crm" ] || "${BENCH}" get-app crm
 
-# Create site if missing
 if [ ! -d "${SITE_DIR}" ]; then
-  echo "Creating site ${HOSTNAME}..."
-  "$BENCH" new-site "${HOSTNAME}" \
+  echo "Creating site ${SITE}..."
+  "${BENCH}" new-site "${SITE}" \
     --force \
     --mariadb-root-password "${MARIADB_ROOT_PASSWORD}" \
     --admin-password "${SITE_ADMIN_PASSWORD}" \
     --no-mariadb-socket
 fi
 
-# Install & configure
-"$BENCH" --site "${HOSTNAME}" install-app crm
-"$BENCH" --site "${HOSTNAME}" set-config developer_mode 1
-"$BENCH" --site "${HOSTNAME}" clear-cache
-"$BENCH" use "${HOSTNAME}"
+"${BENCH}" --site "${SITE}" install-app crm
+"${BENCH}" --site "${SITE}" set-config developer_mode 1
+"${BENCH}" --site "${SITE}" clear-cache
+"${BENCH}" use "${SITE}"
 
-# Start forever (PID 1)
-exec "$BENCH" start
+exec "${BENCH}" start
