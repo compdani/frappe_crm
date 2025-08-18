@@ -8,7 +8,8 @@ ENV SHELL=/bin/bash \
     PROJECT_NAME=crm_dreia_setup \
     MARIADB_ROOT_PASSWORD=changeme \
     SITE_ADMIN_PASSWORD=changeme \
-    REDIS_PASSWORD=changeme
+    SQL_URL=changeme \
+    REDIS_URL=changeme
 
 USER root
 RUN mkdir -p /workspace && chown -R frappe:frappe /workspace
