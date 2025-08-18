@@ -55,16 +55,16 @@ sed -i '/watch/d' ./Procfile || true
 
 "${BENCH}" get-app crm
 
-"${BENCH}" new-site "${}" \
+"${BENCH}" new-site "${HOSTNAME}" \
   --force \
   --mariadb-root-password "${MARIADB_ROOT_PASSWORD}" \
   --admin-password "${SITE_ADMIN_PASSWORD}" \
   --no-mariadb-socket
 
 
-"${BENCH}" --site crm.localhost install-app crm
-"${BENCH}" --site crm.localhost set-config developer_mode 1
-"${BENCH}" --site crm.localhost clear-cache
-"${BENCH}" use crm.localhost
+"${BENCH}" --site "${HOSTNAME}" install-app crm
+"${BENCH}" --site "${HOSTNAME}" set-config developer_mode 1
+"${BENCH}" --site "${HOSTNAME}" clear-cache
+"${BENCH}" use "${HOSTNAME}"
 
 exec "${BENCH}" start
