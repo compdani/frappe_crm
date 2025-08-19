@@ -2,7 +2,6 @@
 set -euo pipefail
 
 # Ensure bench and node are on PATH
-export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 export PATH="${NVM_DIR}/versions/node/v${NODE_VERSION_DEVELOP}/bin/:${PATH}"
 
 # Expected envs:
