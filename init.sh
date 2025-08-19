@@ -1,61 +1,57 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
-# --- simple PATH so bench is found; add your dev Node if present
-export PATH="/home/frappe/.local/bin:/usr/local/bin:/usr/bin:/bin:${PATH}"
-if [ -n "${NVM_DIR:-}" ] && [ -n "${NODE_VERSION_DEVELOP:-}" ] \
-   && [ -d "${NVM_DIR}/versions/node/v${NODE_VERSION_DEVELOP}/bin" ]; then
-  export PATH="${NVM_DIR}/versions/node/v${NODE_VERSION_DEVELOP}/bin:${PATH}"
+# Expect these to be provided by Railway env:
+# SITE_NAME, ADMIN_PASSWORD
+# MYSQLHOST, MYSQLPORT, MYSQLUSER, MYSQLPASSWORD, MYSQLDATABASE  (from Railway MySQL)
+# REDISHOST, REDISPORT, REDISPASSWORD                            (from Railway Redis)
+
+export PATH="${NVM_DIR}/versions/node/v${NODE_VERSION_DEVELOP}/bin/:${PATH}"
+
+SITE_NAME="${SITE_NAME:-crm.localhost}"
+
+# Compose Redis URLs from envs
+REDIS_URL="redis://:${REDISPASSWORD}@${REDISHOST}:${REDISPORT}"
+
+# If bench already exists, just start
+if [ -d "/home/frappe/frappe-bench/apps/frappe" ]; then
+  echo "Bench already exists, starting..."
+  cd /home/frappe/frappe-bench
+  exec bench start
 fi
 
-BENCH="${BENCH_CMD:-bench}"
-BENCH_DIR="/home/frappe/frappe-bench"
+echo "Creating new bench…"
+cd /home/frappe
+bench init --skip-redis-config-generation frappe-bench
+cd frappe-bench
 
-# If a bench already exists, just start it
-if [ -d "${BENCH_DIR}/apps/frappe" ]; then
-  echo "Bench already exists, skipping init"
-  cd "${BENCH_DIR}"
-  exec "${BENCH}" start
-else
-  echo "Creating new bench..."
-fi
+# Point to external MariaDB & Redis (Railway services)
+bench set-mariadb-host "${MYSQLHOST}"
+bench set-redis-cache-host    "${REDIS_URL}"
+bench set-redis-queue-host    "${REDIS_URL}"
+bench set-redis-socketio-host "${REDIS_URL}"
 
-# Create a fresh bench in the standard location
-"${BENCH}" init --skip-redis-config-generation "${BENCH_DIR}"
+# Tweak Procfile – we won’t run Railway Redis processes
+sed -i '/redis/d' ./Procfile
+sed -i '/watch/d' ./Procfile
 
-cd "${BENCH_DIR}"
-
-# Point bench to your external DB + Redis (skip if envs are unset/placeholder)
-if [ -n "${SQL_URL:-}" ] && [ "${SQL_URL}" != "changeme" ]; then
-  "${BENCH}" set-mariadb-host "${SQL_URL}"
-fi
-
-if [ -n "${REDIS_URL:-}" ] && [ "${REDIS_URL}" != "changeme" ]; then
-  "${BENCH}" set-redis-cache-host    "${REDIS_URL}"
-  "${BENCH}" set-redis-queue-host    "${REDIS_URL}"
-  "${BENCH}" set-redis-socketio-host "${REDIS_URL}"
-fi
-
-# Remove redis/watch procs (only if Procfile exists)
-if [ -f "./Procfile" ]; then
-  sed -i '/redis/d' ./Procfile || true
-  sed -i '/watch/d' ./Procfile || true
-fi
-
-# Pull CRM app and create your site
-"${BENCH}" get-app crm
-
-"${BENCH}" new-site "${HOSTNAME:-crm.localhost}" \
+# Get your app and create the site
+bench get-app crm
+bench new-site "${SITE_NAME}" \
   --force \
-  --mariadb-root-password "${MARIADB_ROOT_PASSWORD:-changeme}" \
-  --admin-password "${SITE_ADMIN_PASSWORD:-changeme}" \
+  --mariadb-root-password "${MYSQLPASSWORD}" \
+  --admin-password "${ADMIN_PASSWORD:-admin}" \
+  --db-name "${MYSQLDATABASE}" \
+  --db-host "${MYSQLHOST}" \
+  --db-port "${MYSQLPORT}" \
+  --db-user "${MYSQLUSER}" \
+  --db-password "${MYSQLPASSWORD}" \
   --no-mariadb-socket
 
-# Install + set defaults
-"${BENCH}" --site "${HOSTNAME:-crm.localhost}" install-app crm
-"${BENCH}" --site "${HOSTNAME:-crm.localhost}" set-config developer_mode 1
-"${BENCH}" --site "${HOSTNAME:-crm.localhost}" clear-cache
-"${BENCH}" use "${HOSTNAME:-crm.localhost}"
+bench --site "${SITE_NAME}" install-app crm
+bench --site "${SITE_NAME}" set-config developer_mode 1
+bench --site "${SITE_NAME}" clear-cache
+bench use "${SITE_NAME}"
 
-# Run forever
-exec "${BENCH}" start
+# Start dev-style (single container) processes
+exec bench start
