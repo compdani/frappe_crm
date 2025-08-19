@@ -1,19 +1,25 @@
 #!/bin/bash
 set -euo pipefail
 
-# Expect these to be provided by Railway env:
-# SITE_NAME, ADMIN_PASSWORD
-# MYSQLHOST, MYSQLPORT, MYSQLUSER, MYSQLPASSWORD, MYSQLDATABASE  (from Railway MySQL)
-# REDISHOST, REDISPORT, REDISPASSWORD                            (from Railway Redis)
-
+# Ensure bench and node are on PATH
+export PATH="$HOME/.local/bin:/usr/local/bin:/usr/bin:/bin:$PATH"
 export PATH="${NVM_DIR}/versions/node/v${NODE_VERSION_DEVELOP}/bin/:${PATH}"
+
+# Expected envs:
+# SITE_NAME, ADMIN_PASSWORD
+# MYSQLHOST, MYSQLPORT, MYSQLUSER, MYSQLPASSWORD, MYSQLDATABASE
+# REDISHOST, REDISPORT, REDISPASSWORD (optional)
 
 SITE_NAME="${SITE_NAME:-crm.localhost}"
 
-# Compose Redis URLs from envs
-REDIS_URL="redis://:${REDISPASSWORD}@${REDISHOST}:${REDISPORT}"
+# Build Redis URL (with or without password)
+if [ -n "${REDISPASSWORD:-}" ]; then
+  REDIS_URL="redis://:${REDISPASSWORD}@${REDISHOST}:${REDISPORT}"
+else
+  REDIS_URL="redis://${REDISHOST}:${REDISPORT}"
+fi
 
-# If bench already exists, just start
+# If bench already exists, just start it
 if [ -d "/home/frappe/frappe-bench/apps/frappe" ]; then
   echo "Bench already exists, starting..."
   cd /home/frappe/frappe-bench
@@ -31,14 +37,18 @@ bench set-redis-cache-host    "${REDIS_URL}"
 bench set-redis-queue-host    "${REDIS_URL}"
 bench set-redis-socketio-host "${REDIS_URL}"
 
-# Tweak Procfile – we won’t run Railway Redis processes
-sed -i '/redis/d' ./Procfile
-sed -i '/watch/d' ./Procfile
+# Don’t run local redis/watch in this container
+sed -i '/redis/d' ./Procfile || true
+sed -i '/watch/d' ./Procfile || true
 
-# Get your app and create the site
+# Install your app and create the site
 bench get-app crm
+
+# For managed MySQL on Railway, the provided MYSQLUSER is your “admin” here.
+# We pass it as the "mariadb root" user so bench can create the DB & user.
 bench new-site "${SITE_NAME}" \
   --force \
+  --mariadb-root-username "${MYSQLUSER}" \
   --mariadb-root-password "${MYSQLPASSWORD}" \
   --admin-password "${ADMIN_PASSWORD:-admin}" \
   --db-name "${MYSQLDATABASE}" \
