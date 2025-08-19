@@ -1,13 +1,16 @@
 #!/bin/bash
-set -euo pipefail
-
-# Ensure bench and node are on PATH
+if [ -d "/home/frappe/frappe-bench/apps/frappe" ]; then
+    echo "Bench already exists, skipping init"
+    cd frappe-bench
+    bench start
+else
+    echo "Creating new bench..."
+fi
 export PATH="${NVM_DIR}/versions/node/v${NODE_VERSION_DEVELOP}/bin/:${PATH}"
 
-# Expected envs:
-# SITE_NAME, ADMIN_PASSWORD
-# MYSQLHOST, MYSQLPORT, MYSQLUSER, MYSQLPASSWORD, MYSQLDATABASE
-# REDISHOST, REDISPORT, REDISPASSWORD (optional)
+bench init --skip-redis-config-generation frappe-bench
+
+cd frappe-bench
 
 SITE_NAME="${SITE_NAME:-crm.localhost}"
 
@@ -18,12 +21,7 @@ else
   REDIS_URL="redis://${REDISHOST}:${REDISPORT}"
 fi
 
-# If bench already exists, just start it
-if [ -d "/home/frappe/frappe-bench/apps/frappe" ]; then
-  echo "Bench already exists, starting..."
-  cd /home/frappe/frappe-bench
-  exec bench start
-fi
+
 
 echo "Creating new bench…"
 cd /home/frappe
@@ -58,7 +56,7 @@ bench new-site "${SITE_NAME}" \
   --no-mariadb-socket
 
 bench --site "${SITE_NAME}" install-app crm
-bench --site "${SITE_NAME}" set-config developer_mode 1
+bench --site "${SITE_NAME}" set-config developer_mode 0
 bench --site "${SITE_NAME}" clear-cache
 bench use "${SITE_NAME}"
 
