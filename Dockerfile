@@ -5,7 +5,7 @@ ENV SHELL=/bin/bash \
     NVM_DIR=/home/frappe/.nvm
 
 # Put the script under the frappe home
-COPY --chown=frappe:frappe init.sh /home/frappe/init.sh
+COPY init.sh /workspace/init.sh
 
 # No chmod needed — we'll run it with bash
-CMD ["bash", "/home/frappe/init.sh"]
+CMD ["bash", "/workspace/init.sh"]
